@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.0" tiledversion="1.0.3" orientation="orthogonal" renderorder="right-down" width="10" height="8" tilewidth="16" tileheight="16" nextobjectid="12">
+ <tileset firstgid="1" source="tileset4.tsx"/>
+ <tileset firstgid="257" source="items.tsx"/>
+ <tileset firstgid="258" source="untitled.tsx"/>
+ <layer name="bg" width="10" height="8">
+  <data encoding="base64" compression="zlib">
+   eJxjYBjcIItIdd4kqKUmAACWsAEg
+  </data>
+ </layer>
+ <layer name="ground" width="10" height="8">
+  <data encoding="base64" compression="zlib">
+   eJyrYmBgqGIgHswH4gVAvBOIdwHxbiDegyRfBcXrgdgbiLOA+BQQnwbiM0jyMDlCNAORaqcB8XQi1C4D4uVAvJUAPkokBgCFmiQb
+  </data>
+ </layer>
+ <objectgroup name="Object Layer 1">
+  <object id="2" type="test-object" x="41.4677" y="6.94865" width="7.1728" height="9.8626">
+   <properties>
+    <property name="test-attr" value="hello"/>
+   </properties>
+  </object>
+  <object id="3" name="test-line" type="test-line" x="29.4757" y="44.3817">
+   <polyline points="0,0 21.2942,-21.5184 30.8206,5.60375"/>
+  </object>
+  <object id="4" name="test-ellipse" x="87.5303" y="12.4212" width="41.1451" height="20.9607">
+   <ellipse/>
+  </object>
+  <object id="5" x="54.3462" y="54.7407" width="92.375" height="19">
+   <text wrap="1">Hello World</text>
+  </object>
+  <object id="7" name="sample-polygon" x="12.4212" y="78.4085">
+   <polygon points="0,0 23.2897,-18.6317 73.1684,7.18098 38.2339,25.6186 -2.52305,31.247"/>
+  </object>
+  <object id="8" gid="257" x="96" y="96" width="16" height="16"/>
+  <object id="9" gid="293" x="112" y="96" width="16" height="32.0003"/>
+  <object id="11" gid="11" x="128" y="96" width="16" height="16"/>
+ </objectgroup>
+</map>
