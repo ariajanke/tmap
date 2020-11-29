@@ -44,9 +44,12 @@ namespace tmap {
 class TileSet {
 public:
     using IterValuePair = TiledMapImpl::IterValuePair;
-    using ProperiesMap  = std::map<std::string, std::string>;
+    using PropertiesMap = std::map<std::string, std::string>;
 
     TileSet();
+
+    // movable only (from std::unique_ptr)
+
     ~TileSet();
 
     // <------------------------- io interface ------------------------------->
@@ -70,18 +73,19 @@ public:
 
     TileEffect * tile_effect_for(int gid) const;
 
-    const sf::Texture & texture() const { return m_texture; }
+    const sf::Texture & texture() const;
 
     // <----------------------- tile set information ------------------------->
 
+    /// STL like range
     int begin_gid() const;
 
+    /// STL like, one past the end gid
     int end_gid() const;
 
-    const ProperiesMap * properties_on_gid(int id) const;
+    const PropertiesMap * properties_on_gid(int id) const noexcept;
 
 private:
-
     void fix_file_path();
 
     // a "non-cached" version of (end_gid() - begin_gid())
@@ -89,19 +93,19 @@ private:
     // geometry
     sf::Vector2i size_in_tiles() const;
 
-    void load_tile_properties(const TiXmlElement * tileset_el, int first_gid);
+    const TiXmlElement * follow_tsx(TiXmlDocument & tsx_doc, const TiXmlElement *) const;
 
     void check_invarients() const;
 
     sf::Vector2i m_tile_size;
-    sf::Vector2i m_image_size;
     std::string m_filename;
-    int m_begin_gid;
-    int m_end_gid;
-    int m_spacing;
-    sf::Texture m_texture;
+    int m_begin_gid = 0;
+    int m_end_gid = 0;
 
-    std::vector<ProperiesMap> m_properties;
+    int m_spacing = 0;
+    std::unique_ptr<sf::Texture> m_texture;
+
+    std::vector<PropertiesMap> m_properties;
     std::vector<TileEffect *> m_tile_effects;
     std::string m_referer;
 };

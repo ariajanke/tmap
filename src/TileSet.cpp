@@ -37,9 +37,10 @@
 
 namespace {
 
-using Error = std::runtime_error;
-using TiXmlElement = tinyxml2::XMLElement;
-using XmlRange = tmap::XmlRange;
+using Error         = std::runtime_error;
+using TiXmlElement  = tinyxml2::XMLElement;
+using XmlRange      = tmap::XmlRange;
+using PropertiesMap = tmap::TileSet::PropertiesMap;
 
 bool is_dir_slash(char c) { return c == '\\' || c == '/'; }
 
@@ -58,34 +59,27 @@ sf::Vector2i size_in_tiles
     (const sf::Vector2i & tile_size, const sf::Vector2i & image_size,
      int spacing);
 
+std::vector<PropertiesMap> load_tile_properties(const TiXmlElement *);
+
 } // end of <anonymous> namespace
 
 namespace tmap {
 
-TileSet::TileSet():
-    m_tile_size(),
-    m_image_size(),
-    m_filename(),
-    m_begin_gid(0),
-    m_end_gid(0),
-    m_spacing(0),
-    m_texture()
-{ check_invarients(); }
+TileSet::TileSet()
+    { check_invarients(); }
 
-TileSet::~TileSet(){}
+TileSet::~TileSet() {}
 
-void TileSet::set_referer(const std::string & referer) {
-    m_referer = referer;
-}
+void TileSet::set_referer(const std::string & referer)
+    { m_referer = referer; }
 
 bool TileSet::load_texture() {
     fix_file_path();
 
-    if (!m_texture.loadFromFile(m_filename))
+    m_texture = std::make_unique<sf::Texture>();
+    if (!m_texture->loadFromFile(m_filename))
         return false;
 
-    m_image_size = sf::Vector2i(int(m_texture.getSize().x),
-                                int(m_texture.getSize().y));
     check_invarients();
     return true;
 }
@@ -116,46 +110,36 @@ TileEffect * TileSet::tile_effect_for(int gid) const {
     return m_tile_effects[std::size_t(local_id)];
 }
 
+const sf::Texture & TileSet::texture() const {
+    if (m_texture) return *m_texture;
+    throw Error("TileSet::texture: TileSet has no texture loaded.");
+}
+
 int TileSet::begin_gid() const { return m_begin_gid; }
 
 int TileSet::end_gid() const { return m_end_gid; }
 
-const TileSet::ProperiesMap * TileSet::properties_on_gid(int id) const {
+const TileSet::PropertiesMap * TileSet::properties_on_gid(int id) const noexcept {
     id -= begin_gid();
-    assert(id >= 0);
+    if (id < 0) return nullptr;
     if (id >= int(m_properties.size())) return nullptr;
     return &m_properties[std::size_t(id)];
 }
 
 void TileSet::load_from_xml(const TiXmlElement * el) {
-
     // may come from map file, a seperate tileset file, will not have this
-    int first_gid;
-    first_gid = read_int_attribute(el, "firstgid");
+    int first_gid = read_int_attribute(el, "firstgid");
 
     // check if el is just a TSX reference and fix that!
-    const char * source_file;
     TiXmlDocument tsx_doc; // may need to live as long as el
-    if ((source_file = el->Attribute("source"))) {
-        std::string fn = source_file;
-        fix_path(fn, m_referer, fn);
-        load_xml_file(tsx_doc, fn.c_str());
-        tinyxml2::XMLNode * first_child = tsx_doc.FirstChildElement("tileset");
-        if (!first_child)
-            throw Error(make_error_header(el) + "TSX file, has no child nodes.");
-        if (!first_child->ToElement())
-            throw Error(make_error_header(el) + "TSX file, cannot find tileset.");
-
-        // loaded document ok
-        el = first_child->ToElement();
-    }
+    el = follow_tsx(tsx_doc, el);
 
     // tileset MUST have all the following to be valid
     int spacing = 0;
-    const char * source;
+    const char * source = nullptr;
     sf::Vector2i tile_size;
-    sf::Vector2i image_size;
-
+    std::unique_ptr<sf::Texture> texture_ = nullptr;
+    std::vector<PropertiesMap> properties;
     try {
         tile_size.x = read_int_attribute(el, "tilewidth" );
         tile_size.y = read_int_attribute(el, "tileheight");
@@ -171,20 +155,28 @@ void TileSet::load_from_xml(const TiXmlElement * el) {
         if (!img_src_el)
             throw Error(make_error_header(el) + "TileSets requires an image.");
 
-        // next we need image's attributes (all of them!)
-        image_size.x = read_int_attribute(img_src_el, "width" );
-        image_size.y = read_int_attribute(img_src_el, "height");
+        // this should be ignored I guess?
+        // of course this seems odd/inconsistent behavior on TilEd's behavior
+        // Why/How can I add a tile object whose id falls outside of the
+        // tileset, with size being determined solely by XML data?
         source = img_src_el->Attribute("source");
-        if (!source)
+        if (!source) {
             throw Error(make_error_header(el) + "No source image specified "
                         "for tileset.");
-        load_tile_properties(el, first_gid);
+        }
+        texture_ = std::make_unique<sf::Texture>();
+        std::string fn = source;
+        fix_path(fn, m_referer, fn);
+        if (!texture_->loadFromFile(fn)) {
+            throw Error("TileSet::load_from_xml: cannot load image \"" + fn + "\" (with referer \"" + m_referer + "\")");
+        }
+        properties = load_tile_properties(el);
     } catch (std::invalid_argument &) {
         throw Error(make_error_header(el) + "TileSet information contains "
                     "non-integers where integers were expected");
     }
     std::vector<TileEffect *> tile_effects;
-    sf::Vector2i tileset_size = ::size_in_tiles(tile_size, image_size, spacing);
+    sf::Vector2i tileset_size = ::size_in_tiles(tile_size, sf::Vector2i(texture_->getSize()), spacing);
     tile_effects.resize(std::size_t(tileset_size.x*tileset_size.y),
                         &NoTileEffect::instance()                 );
 
@@ -193,12 +185,15 @@ void TileSet::load_from_xml(const TiXmlElement * el) {
 
     // these will not throw
     m_tile_effects.swap(tile_effects);
+    m_texture     .swap(texture_);
+    m_properties  .swap(properties);
+
     m_tile_size  = tile_size;
-    m_image_size = image_size;
     m_spacing    = spacing;
     m_begin_gid  = first_gid;
     // must be done last (spacing and tile size)
     m_end_gid    = first_gid + tileset_size.x*tileset_size.y;
+
     assert(tileset_size == size_in_tiles());
     assert(m_tile_effects.size() >= m_properties.size());
     check_invarients();
@@ -210,7 +205,7 @@ void TileSet::set_tile_effect
     assert(m_tile_effects.size() >= m_properties.size());
     const std::size_t end_index = m_properties.size();
     for (std::size_t i = 0; i != end_index; ++i) {
-        const ProperiesMap & prop_map = m_properties[i];
+        const PropertiesMap & prop_map = m_properties[i];
         auto itr = prop_map.find(name);
         if (itr == prop_map.end()) continue;
         if (itr->second != value && value[0] != '\0') continue;
@@ -256,26 +251,6 @@ TileSet::IterValuePair TileSet::find_tile_effect_ref_and_name
     return IterValuePair();
 }
 
-void TileSet::load_tile_properties(const TiXmlElement * tileset_el, int) {
-    using XmlEl = TiXmlElement;
-    for (const XmlEl & tile_el : XmlRange(tileset_el, "tile")) {
-        std::size_t index = std::size_t(read_int_attribute(&tile_el, "id"));
-        if (index >= m_properties.size()) {
-            m_properties.resize(index + 1);
-        }
-        ProperiesMap & props = m_properties[index];
-        for (const XmlEl & props_el : XmlRange(tile_el, "properties")) {
-            load_properties(props, &props_el);
-        }
-    }
-    check_invarients();
-}
-
-/* private */ void TileSet::check_invarients() const {
-    assert(m_end_gid - m_begin_gid == int(m_tile_effects.size()));
-    //assert(m_tile_effects.size()   == m_properties.size()       );
-}
-
 /* private */ void TileSet::fix_file_path() {
     if (m_referer.empty()) return;
 
@@ -287,10 +262,33 @@ void TileSet::load_tile_properties(const TiXmlElement * tileset_el, int) {
 }
 
 /* private */ sf::Vector2i TileSet::size_in_tiles() const {
-    return ::size_in_tiles(m_tile_size, m_image_size, m_spacing);
+    return ::size_in_tiles(m_tile_size, sf::Vector2i(texture().getSize()), m_spacing);
 }
 
-} // end of rj namespace
+/* private */ const TiXmlElement * TileSet::follow_tsx
+    (TiXmlDocument & tsx_doc, const TiXmlElement * el) const
+{
+    const char * source_file = nullptr;
+    if (!(source_file = el->Attribute("source"))) return el;
+
+    std::string fn = source_file;
+    fix_path(fn, m_referer, fn);
+    load_xml_file(tsx_doc, fn.c_str());
+    tinyxml2::XMLNode * first_child = tsx_doc.FirstChildElement("tileset");
+    if (!first_child)
+        throw Error(make_error_header(el) + "TSX file, has no child nodes.");
+    if (!first_child->ToElement())
+        throw Error(make_error_header(el) + "TSX file, cannot find tileset.");
+
+    // loaded document ok
+    return first_child->ToElement();
+}
+
+/* private */ void TileSet::check_invarients() const {
+    assert(m_end_gid - m_begin_gid == int(m_tile_effects.size()));
+}
+
+} // end of tmap namespace
 
 namespace {
 
@@ -345,6 +343,22 @@ sf::Vector2i size_in_tiles
     if (tile_size.x == 0 || tile_size.y == 0) return sf::Vector2i();
     return sf::Vector2i(image_size.x / (tile_size.x + spacing),
                         image_size.y / (tile_size.y + spacing));
+}
+
+std::vector<PropertiesMap> load_tile_properties(const TiXmlElement * tileset_el) {
+    using XmlEl = TiXmlElement;
+    std::vector<PropertiesMap> props_vec;
+    for (const XmlEl & tile_el : XmlRange(tileset_el, "tile")) {
+        std::size_t index = std::size_t(tmap::read_int_attribute(&tile_el, "id"));
+        if (index >= props_vec.size()) {
+            props_vec.resize(index + 1);
+        }
+        PropertiesMap & props = props_vec[index];
+        for (const XmlEl & props_el : XmlRange(tile_el, "properties")) {
+            load_properties(props, &props_el);
+        }
+    }
+    return props_vec;
 }
 
 } // end of <anonymous> namespace

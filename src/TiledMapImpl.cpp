@@ -455,6 +455,9 @@ bool check_and_load_map_object_gid
     (const tinyxml2::XMLElement * el, const TileSetPtrVector & tilesets,
      MapObject & obj)
 {
+    static const char * const k_gid_not_found =
+        "check_and_load_map_object_gid: gid is not in range of any tileset.";
+
     int gid = 0;
     if (el->QueryIntAttribute("gid", &gid) != tinyxml2::XML_SUCCESS)
         { return false; }
@@ -464,11 +467,15 @@ bool check_and_load_map_object_gid
     auto itr = std::lower_bound(tilesets.begin(), tilesets.end(), gid,
         [](const TileSetPtr & lhs, int gid)
         { return lhs->end_gid() <= gid; });
+
     if (itr == tilesets.end()) {
-        throw Error("check_and_load_map_object_gid: gid is not in range of any tileset.");
+        throw Error(k_gid_not_found);
     }
 
     const auto & tileset = **itr;
+    if (tileset.begin_gid() > gid || tileset.end_gid() <= gid) {
+        throw Error(k_gid_not_found);
+    }
     assert(tileset.begin_gid() <= gid && tileset.end_gid() > gid);
     obj.texture_bounds = tileset.compute_texture_rect(gid);
     obj.texture        = &tileset.texture();
