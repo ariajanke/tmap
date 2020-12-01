@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.0" tiledversion="1.0.3" orientation="orthogonal" renderorder="right-down" width="10" height="8" tilewidth="16" tileheight="16" nextobjectid="13">
+<map version="1.0" tiledversion="1.0.3" orientation="orthogonal" renderorder="right-down" width="10" height="8" tilewidth="16" tileheight="16" nextobjectid="14">
  <tileset firstgid="1" source="tileset4.tsx"/>
  <tileset firstgid="257" source="items.tsx"/>
- <tileset firstgid="259" source="untitled.tsx"/>
+ <tileset firstgid="263" source="untitled.tsx"/>
  <layer name="bg" width="10" height="8">
   <data encoding="base64" compression="zlib">
    eJxjYBjcIItIdd4kqKUmAACWsAEg
@@ -32,8 +32,9 @@
    <polygon points="0,0 23.2897,-18.6317 73.1684,7.18098 38.2339,25.6186 -2.52305,31.247"/>
   </object>
   <object id="8" gid="257" x="96" y="96" width="16" height="16"/>
-  <object id="9" gid="294" x="112" y="96" width="16" height="32.0003"/>
+  <object id="9" gid="298" x="112" y="96" width="16" height="32.0003"/>
   <object id="11" gid="11" x="128" y="96" width="16" height="16"/>
   <object id="12" gid="258" x="135.083" y="32.0924" width="16" height="16"/>
+  <object id="13" type="not-a-diamond" gid="257" x="1.56339" y="63.5415" width="16" height="16"/>
  </objectgroup>
 </map>

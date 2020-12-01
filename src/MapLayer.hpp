@@ -38,19 +38,6 @@ namespace tmap {
  */
 class MapLayer : public sf::Drawable {
 public:
-
-    /** Sets the center of the field of view for the Map Layer.
-     *  @param x X coordinate
-     *  @param y Y coordinate
-     */
-    virtual void set_center(float x, float y) = 0;
-
-    /** Sets the size of the field of view for the MapLayer
-     *  @param w width
-     *  @param h height
-     */
-    virtual void set_field_size(float w, float h) = 0;
-
     virtual void set_translation(float dx, float dy) = 0;
 
     /** Each Map Layer may have a name

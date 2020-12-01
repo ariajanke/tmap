@@ -37,10 +37,11 @@
 
 namespace {
 
-using Error         = std::runtime_error;
-using TiXmlElement  = tinyxml2::XMLElement;
-using XmlRange      = tmap::XmlRange;
-using PropertiesMap = tmap::TileSet::PropertiesMap;
+using Error        = std::runtime_error;
+using InvArg       = std::invalid_argument;
+using TiXmlElement = tinyxml2::XMLElement;
+using XmlRange     = tmap::XmlRange;
+using PropertyMap  = tmap::TileSet::PropertyMap;
 
 bool is_dir_slash(char c) { return c == '\\' || c == '/'; }
 
@@ -59,11 +60,19 @@ sf::Vector2i size_in_tiles
     (const sf::Vector2i & tile_size, const sf::Vector2i & image_size,
      int spacing);
 
-std::vector<PropertiesMap> load_tile_properties(const TiXmlElement *);
+std::vector<PropertyMap> load_tile_properties(const TiXmlElement *);
+
+std::vector<std::string> load_tile_types(const TiXmlElement *);
 
 } // end of <anonymous> namespace
 
 namespace tmap {
+
+/* static */ constexpr const int TileSetInterface::k_no_tile;
+
+/* vtable anchcor */ TileSetInterface::~TileSetInterface() {}
+
+// ----------------------------------------------------------------------------
 
 TileSet::TileSet()
     { check_invarients(); }
@@ -88,27 +97,12 @@ sf::IntRect TileSet::compute_texture_rect(TileFrame frame) const
     { return compute_texture_rect(frame.m_gid); }
 
 sf::IntRect TileSet::compute_texture_rect(int gid) const {
-    if (size_in_tiles().x == 0) {
-        throw Error("Tileset \"" + m_filename + "\" "
-                    "size is invalid (width is 0).");
-    }
-    int local_id = gid - begin_gid();
-    int tile_x = local_id % size_in_tiles().x;
-    int tile_y = local_id / size_in_tiles().x;
-
-    sf::IntRect txt_rect;
-    txt_rect.left   = tile_x*(m_tile_size.x + m_spacing);
-    txt_rect.top    = tile_y*(m_tile_size.y + m_spacing);
-    txt_rect.width  = m_tile_size.x;
-    txt_rect.height = m_tile_size.y;
-
-    return txt_rect;
+    verify_owns_gid(gid, "compute_texture_rect");
+    return texture_rectangle(gid - begin_gid());
 }
 
-TileEffect * TileSet::tile_effect_for(int gid) const {
-    int local_id = gid - begin_gid();
-    return m_tile_effects[std::size_t(local_id)];
-}
+TileEffect * TileSet::tile_effect_for(int gid) const
+    { return m_tile_effects[std::size_t(convert_to_local_id(gid))]; }
 
 const sf::Texture & TileSet::texture() const {
     if (m_texture) return *m_texture;
@@ -119,11 +113,22 @@ int TileSet::begin_gid() const { return m_begin_gid; }
 
 int TileSet::end_gid() const { return m_end_gid; }
 
-const TileSet::PropertiesMap * TileSet::properties_on_gid(int id) const noexcept {
-    id -= begin_gid();
-    if (id < 0) return nullptr;
-    if (id >= int(m_properties.size())) return nullptr;
-    return &m_properties[std::size_t(id)];
+const PropertyMap * TileSet::properties_on_gid(int id) const {
+    verify_owns_gid(id, "properties_on_gid");
+    return properties_on(convert_to_local_id(id));
+}
+
+const PropertyMap * TileSet::properties_on(int tid) const {
+    if (tid < 0) return nullptr;
+    if (tid >= int(m_properties.size())) return nullptr;
+    return &m_properties[std::size_t(tid)];
+}
+
+const std::string & TileSet::type_of(int tid) const {
+    verify_owns_local_id(tid, "type_of");
+    static const std::string k_empty;
+    if (tid >= int(m_tile_types.size())) return k_empty;
+    return m_tile_types[std::size_t(tid)];
 }
 
 void TileSet::load_from_xml(const TiXmlElement * el) {
@@ -139,7 +144,8 @@ void TileSet::load_from_xml(const TiXmlElement * el) {
     const char * source = nullptr;
     sf::Vector2i tile_size;
     std::unique_ptr<sf::Texture> texture_ = nullptr;
-    std::vector<PropertiesMap> properties;
+    std::vector<PropertyMap> properties;
+    std::vector<std::string> tile_types;
     try {
         tile_size.x = read_int_attribute(el, "tilewidth" );
         tile_size.y = read_int_attribute(el, "tileheight");
@@ -171,7 +177,8 @@ void TileSet::load_from_xml(const TiXmlElement * el) {
             throw Error("TileSet::load_from_xml: cannot load image \"" + fn + "\" (with referer \"" + m_referer + "\")");
         }
         properties = load_tile_properties(el);
-    } catch (std::invalid_argument &) {
+        tile_types = load_tile_types(el);
+    } catch (InvArg &) {
         throw Error(make_error_header(el) + "TileSet information contains "
                     "non-integers where integers were expected");
     }
@@ -187,6 +194,7 @@ void TileSet::load_from_xml(const TiXmlElement * el) {
     m_tile_effects.swap(tile_effects);
     m_texture     .swap(texture_);
     m_properties  .swap(properties);
+    m_tile_types  .swap(tile_types);
 
     m_tile_size  = tile_size;
     m_spacing    = spacing;
@@ -205,7 +213,7 @@ void TileSet::set_tile_effect
     assert(m_tile_effects.size() >= m_properties.size());
     const std::size_t end_index = m_properties.size();
     for (std::size_t i = 0; i != end_index; ++i) {
-        const PropertiesMap & prop_map = m_properties[i];
+        const PropertyMap & prop_map = m_properties[i];
         auto itr = prop_map.find(name);
         if (itr == prop_map.end()) continue;
         if (itr->second != value && value[0] != '\0') continue;
@@ -284,6 +292,59 @@ TileSet::IterValuePair TileSet::find_tile_effect_ref_and_name
     return first_child->ToElement();
 }
 
+/* private */ int TileSet::convert_to_gid(int tid) const {
+    if (tid < 0) return k_no_tile;
+    if (tid > (end_gid() - begin_gid())) return k_no_tile;
+    return tid + begin_gid();
+}
+
+/* private */ sf::IntRect TileSet::texture_rectangle(int local_id) const {
+    // convert to tid
+    verify_owns_local_id(local_id, "texture_rectangle");
+    if (size_in_tiles().x == 0) {
+        throw Error("Tileset \"" + m_filename + "\" "
+                    "size is invalid (width is 0).");
+    }
+
+    int tile_x = local_id % size_in_tiles().x;
+    int tile_y = local_id / size_in_tiles().x;
+
+    sf::IntRect txt_rect;
+    txt_rect.left   = tile_x*(m_tile_size.x + m_spacing);
+    txt_rect.top    = tile_y*(m_tile_size.y + m_spacing);
+    txt_rect.width  = m_tile_size.x;
+    txt_rect.height = m_tile_size.y;
+
+    return txt_rect;
+}
+
+/* private */ TileEffect * TileSet::get_effect(int tid) const {
+    verify_owns_local_id(tid, "get_effect");
+    return m_tile_effects[std::size_t(tid)];
+}
+
+/* private */ int TileSet::convert_to_local_id(int gid) const {
+    verify_owns_gid(gid, "convert_to_local_id");
+    return gid - begin_gid();
+}
+
+/* private */ void TileSet::verify_owns_gid(int gid, const char * caller) const {
+    if (gid >= begin_gid() && gid < end_gid()) return;
+    throw InvArg("TileSet::" + std::string(caller) + ": gid "
+                 + std::to_string(gid) + " does not belong to this tileset "
+                 "containing gids [" + std::to_string(begin_gid()) + " "
+                 + std::to_string(end_gid()) + "].");
+}
+
+/* private */ void TileSet::verify_owns_local_id(int tid, const char * caller) const {
+    if (tid < 0)
+        throw InvArg("TileSet::" + std::string(caller) + " local id must be a positive integer.");
+    if (tid < (end_gid() - begin_gid())) return;
+    throw InvArg("TileSet::" + std::string(caller) + " given local id ("
+                 + std::to_string(tid) + ") exceeds the maximum id value ("
+                 + std::to_string(end_gid() - begin_gid()) + ")");
+}
+
 /* private */ void TileSet::check_invarients() const {
     assert(m_end_gid - m_begin_gid == int(m_tile_effects.size()));
 }
@@ -291,6 +352,9 @@ TileSet::IterValuePair TileSet::find_tile_effect_ref_and_name
 } // end of tmap namespace
 
 namespace {
+
+template <typename T, typename Func>
+std::vector<T> load_tiles(const TiXmlElement *, Func &&);
 
 void fix_path
     (const std::string & referee, const std::string & referer,
@@ -345,20 +409,43 @@ sf::Vector2i size_in_tiles
                         image_size.y / (tile_size.y + spacing));
 }
 
-std::vector<PropertiesMap> load_tile_properties(const TiXmlElement * tileset_el) {
+std::vector<PropertyMap> load_tile_properties(const TiXmlElement * tileset_el) {
     using XmlEl = TiXmlElement;
-    std::vector<PropertiesMap> props_vec;
-    for (const XmlEl & tile_el : XmlRange(tileset_el, "tile")) {
-        std::size_t index = std::size_t(tmap::read_int_attribute(&tile_el, "id"));
-        if (index >= props_vec.size()) {
-            props_vec.resize(index + 1);
-        }
-        PropertiesMap & props = props_vec[index];
+    return load_tiles<PropertyMap>(tileset_el, []
+        (const XmlEl & tile_el, PropertyMap & props)
+    {
         for (const XmlEl & props_el : XmlRange(tile_el, "properties")) {
             load_properties(props, &props_el);
         }
+    });
+}
+
+std::vector<std::string> load_tile_types(const TiXmlElement * el) {
+    using XmlEl = TiXmlElement;
+    return load_tiles<std::string>(el, []
+        (const XmlEl & tile_el, std::string & typename_)
+    {
+        const auto * gv = tile_el.Attribute("type");
+        if (!gv) return;
+        typename_ = gv;
+    });
+}
+
+// ----------------------------------------------------------------------------
+
+template <typename T, typename Func>
+std::vector<T> load_tiles(const TiXmlElement * el, Func && f) {
+    using XmlEl = TiXmlElement;
+    std::vector<T> rv;
+    for (const XmlEl & tile_el : XmlRange(el, "tile")) {
+        std::size_t index = std::size_t(tmap::read_int_attribute(&tile_el, "id"));
+        if (index >= rv.size()) {
+            rv.resize(index + 1);
+        }
+        T & obj = rv[index];
+        f(tile_el, obj);
     }
-    return props_vec;
+    return rv;
 }
 
 } // end of <anonymous> namespace

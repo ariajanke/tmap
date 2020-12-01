@@ -72,7 +72,7 @@ private:
  *  To provide your own TileEffect, create a class which inherits from this
  *  one, then set which tiles (by name/value pairs) which will have that effect
  *  applied.
- *  @see TiledMap::assign_tile_effect_with_property_pair(const char*,const char*,TileEffect*)
+ *  @see TiledMap::access_tile_effect(const char*,const char*,TileEffect*)
  *  on how to do this.
  */
 struct TileEffect {

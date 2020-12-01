@@ -30,33 +30,13 @@
 
 namespace tmap {
 
-ColorLayer::ColorLayer(): m_rect() {}
+ColorLayer::ColorLayer() {}
 
-void ColorLayer::set_center(float x, float y) {
-    m_rect.set_x(x - (m_rect.width() /2.f) + m_translation.x);
-    m_rect.set_y(y - (m_rect.height()/2.f) + m_translation.y);
-}
-
-sf::Vector2f ColorLayer::center() const {
-    return sf::Vector2f
-        (m_rect.x() + m_rect.width() /2.f,
-         m_rect.y() + m_rect.height()/2.f);
-}
-
-void ColorLayer::set_field_size(float w, float h) {
-    sf::Vector2f cent = center();
-    m_rect.set_width(w);
-    m_rect.set_height(h);
-    m_rect.set_position(cent.x - w/2.f, cent.y - h/2.f);
-}
-
-void ColorLayer::set_translation(float x, float y) {
-    m_translation = sf::Vector2f(x, y);
-    set_center(center().x, center().y);
-}
+void ColorLayer::set_translation(float, float)
+    {}
 
 void ColorLayer::set_color(sf::Color c)
-    { m_rect.set_color(c); }
+    { m_color = c; }
 
 const std::string & ColorLayer::name() const {
     static const std::string t_name;
@@ -64,10 +44,15 @@ const std::string & ColorLayer::name() const {
 }
 
 /* protected virtual */ void ColorLayer::draw
-    (sf::RenderTarget & target, sf::RenderStates) const
+    (sf::RenderTarget & target, sf::RenderStates states) const
 {
-    return;
-    target.draw(m_rect);
+    DrawRectangle drect;
+    auto view = target.getView();
+    drect.set_position(view.getCenter().x - view.getSize().x*0.5f,
+                       view.getCenter().y - view.getSize().y*0.5f);
+    drect.set_size(view.getSize().x, view.getSize().y);
+    drect.set_color(m_color);
+    target.draw(drect, states);
 }
 
 } // end of tmap namespace

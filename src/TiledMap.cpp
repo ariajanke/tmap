@@ -31,25 +31,25 @@
 #include "MapLayer.hpp"
 
 namespace {
-    using MapLayerIter      = tmap::TiledMap::MapLayerIter;
-    using MapLayerConstIter = tmap::TiledMap::MapLayerConstIter;
-}
+
+using MapLayerIter      = tmap::TiledMap::MapLayerIter;
+using MapLayerConstIter = tmap::TiledMap::MapLayerConstIter;
+using TileSetPtr        = tmap::TiledMap::TileSetPtr;
+
+} // end of <anonymous> namespace
 
 namespace tmap {
 
 TilePropertiesInterface::~TilePropertiesInterface() {}
 
-void TiledMap::load_from_file(const char * filename) {
-    m_impl->load_from_file(filename);
-}
+void TiledMap::load_from_file(const char * filename)
+    { m_impl->load_from_file(filename); }
 
-void TiledMap::apply_view(const sf::View & view) {
-    m_impl->apply_view(view);
-}
+void TiledMap::set_translation(const sf::Vector2f & offset)
+    { m_impl->set_translation(offset); }
 
-void TiledMap::set_translation(const sf::Vector2f & offset) {
-    m_impl->set_translation(offset);
-}
+TileSetPtr TiledMap::get_tile_set_for_gid(int gid) const noexcept
+    { return m_impl->get_tile_set_for_gid(gid); }
 
 const TilePropertiesInterface * TiledMap::find_tile_layer
     (const std::string & name) const
@@ -58,13 +58,11 @@ const TilePropertiesInterface * TiledMap::find_tile_layer
 TilePropertiesInterface * TiledMap::find_tile_layer(const std::string & name)
     { return m_impl->find_tile_layer(name); }
 
-const TiledMap::PropertyMap & TiledMap::map_properties() const {
-    return m_impl->map_properties();
-}
+const TiledMap::PropertyMap & TiledMap::map_properties() const
+    { return m_impl->map_properties(); }
 
-const TiledMap::MapObjectContainer & TiledMap::map_objects() const {
-    return m_impl->map_objects();
-}
+const TiledMap::MapObjectContainer & TiledMap::map_objects() const
+    { return m_impl->map_objects(); }
 
 MapLayerIter TiledMap::begin()
     { return m_impl->begin(); }
@@ -98,23 +96,28 @@ MapLayerConstIter TiledMap::find_layer
     (const char * name, MapLayerConstIter pos) const
     { return m_impl->find_layer(name, pos); }
 
-void TiledMap::swap(TiledMap & other) {
-    std::swap(m_impl, other.m_impl);
-}
+void TiledMap::swap(TiledMap & other)
+    { std::swap(m_impl, other.m_impl); }
 
-/* protected */ TiledMap::TiledMap():
+TiledMap::TiledMap():
     m_impl(new TiledMapImpl)
 {}
 
-/* protected */ TiledMap::~TiledMap() {
-    delete m_impl;
+TiledMap::TiledMap(TiledMap && rhs):
+    m_impl(nullptr)
+    { swap(rhs); }
+
+TiledMap::~TiledMap()
+    { delete m_impl; }
+
+TiledMap & TiledMap::operator = (TiledMap && rhs) {
+    swap(rhs);
+    return *this;
 }
 
 /* private */ TiledMap::IterValuePair TiledMap::find_tile_effect_ref_and_name
     (const char * name, const IterValuePair & prev)
-{
-    return m_impl->find_tile_effect_ref_and_name(name, prev);
-}
+{ return m_impl->find_tile_effect_ref_and_name(name, prev); }
 
 /* private */ TiledMap::IterValuePair TiledMap::find_tile_effect_ref_and_name
     (const char * name)

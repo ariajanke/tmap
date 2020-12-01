@@ -41,16 +41,15 @@
 
 namespace tmap {
 
-class TileSet {
+class TileSet final : public TileSetInterface {
 public:
     using IterValuePair = TiledMapImpl::IterValuePair;
-    using PropertiesMap = std::map<std::string, std::string>;
 
     TileSet();
 
     // movable only (from std::unique_ptr)
 
-    ~TileSet();
+    ~TileSet() override;
 
     // <------------------------- io interface ------------------------------->
 
@@ -73,7 +72,8 @@ public:
 
     TileEffect * tile_effect_for(int gid) const;
 
-    const sf::Texture & texture() const;
+    /** @copydoc TileSetInterface::texture(int) */
+    const sf::Texture & texture() const override;
 
     // <----------------------- tile set information ------------------------->
 
@@ -83,7 +83,12 @@ public:
     /// STL like, one past the end gid
     int end_gid() const;
 
-    const PropertiesMap * properties_on_gid(int id) const noexcept;
+    const PropertyMap * properties_on_gid(int gid) const;
+
+    /** @copydoc TileSetInterface::properties_on(int) */
+    const PropertyMap * properties_on(int tid) const override;
+
+    const std::string & type_of(int tid) const override;
 
 private:
     void fix_file_path();
@@ -95,6 +100,18 @@ private:
 
     const TiXmlElement * follow_tsx(TiXmlDocument & tsx_doc, const TiXmlElement *) const;
 
+    int convert_to_gid(int tid) const override;
+
+    sf::IntRect texture_rectangle(int tid) const override;
+
+    TileEffect * get_effect(int tid) const override;
+
+    int convert_to_local_id(int gid) const override;
+
+    void verify_owns_gid(int, const char * caller) const;
+
+    void verify_owns_local_id(int, const char * caller) const;
+
     void check_invarients() const;
 
     sf::Vector2i m_tile_size;
@@ -105,8 +122,9 @@ private:
     int m_spacing = 0;
     std::unique_ptr<sf::Texture> m_texture;
 
-    std::vector<PropertiesMap> m_properties;
+    std::vector<PropertyMap > m_properties;
     std::vector<TileEffect *> m_tile_effects;
+    std::vector<std::string > m_tile_types;
     std::string m_referer;
 };
 

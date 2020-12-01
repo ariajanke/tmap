@@ -31,19 +31,83 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <memory>
 
 namespace sf { class Texture; }
 
 namespace tmap {
+
+struct TileEffect;
+
+/** @brief Provides some basic information about a tile set
+ *
+ *  (anchored in TileSet.cpp)
+ */
+struct TileSetInterface {
+    using PropertyMap = std::map<std::string, std::string>;
+
+    static constexpr const int k_no_tile = 0;
+
+    virtual ~TileSetInterface();
+
+    /** Converts local tileset id to a global tile id.
+     *  @note Some tilesets may have properties which refer to other tiles by
+     *        a local id.
+     *  @throws if the tid is not owned by the tile set or is otherwise invalid
+     *  @param tid local tileset id
+     *  @return returns global id
+     */
+    virtual int convert_to_gid(int tid) const = 0;
+
+    /** Converts global id to local id.
+     *  @param gid global id
+     *  @returns local id, or k_no_tile if gid is not owned by this tile set
+     */
+    virtual int convert_to_local_id(int gid) const = 0;
+
+    /** @throws if for some reason that the tile set does not have a texture
+     *          (this should only occur if there's a problem with THIS library)
+     *  @return const reference to the tileset's texture
+     */
+    virtual const sf::Texture & texture() const = 0;
+
+    /** @param gid global id (NOT local id, you may need to convert)
+     *  @throws if the specified tid does not belong to the tileset
+     *  @return returns the texture rectangle
+     */
+    virtual sf::IntRect texture_rectangle(int tid) const = 0;
+
+    /** @param gid global tile id
+     *  @returns the tile effect associated with a global id, nullptr is
+     *           returned if the tileset does not contain the gid
+     */
+    virtual TileEffect * get_effect(int tid) const = 0;
+
+    /** @param tid local tile set id
+     *  @returns property pairs for a given tid
+     */
+    virtual const PropertyMap * properties_on(int tid) const = 0;
+
+    /** @param tid local tile set id
+     *  @returns the type attribute for the local tile id
+     */
+    virtual const std::string & type_of(int tid) const = 0;
+};
+
+// ----------------------------------------------------------------------------
 
 /** Tiled supports object layers. To take full advantage of that, this object
  *  defines fields for each of the Tiled built-in properties and an STL
  *  string -> string map for all the user custom properties
  */
 struct MapObject {
-    using PropertyMap = std::map<std::string, std::string>;
+    using PropertyMap        = TileSetInterface::PropertyMap;
     using MapObjectContainer = std::vector<MapObject>;
-    using PointVector = std::vector<sf::Vector2f>;
+    using PointVector        = std::vector<sf::Vector2f>;
+    using TileSetPtr         = std::shared_ptr<const TileSetInterface>;
+
+    static constexpr const int k_no_tile = TileSetInterface::k_no_tile;
+
     enum ShapeType {
         k_rectangle, k_text, k_ellipse, k_polygon, k_polyline, k_invalid_shape
     };
@@ -67,15 +131,22 @@ struct MapObject {
 
     /** Objects may take many shapes, depends on the tool used to create them */
     ShapeType shape_type = k_invalid_shape;
-    
-    /** Objects may also tiles, which will be linked to a texture */
-    const sf::Texture * texture = nullptr;
-    
-    /** Objects that are tiles, will also have texture boundaries. */
-    sf::IntRect texture_bounds;
+
+    /** Objects may also tiles, which will have a local tileset id */
+    int local_tile_id = 0;
+
+    /** Objects may also tiles, this tile set interface (which will be
+     *  non-null if it is a tile object), provides methods to access some basic
+     *  information about the tile.
+     *  @note Only tile objects will have a non-null tile set
+     *  @see TileSetInterface
+     */
+    TileSetPtr tile_set = nullptr;
 
     void swap(MapObject & rhs);
 };
+
+// ----------------------------------------------------------------------------
 
 template <typename T>
 void swap_rectangles(sf::Rect<T> & lhs, sf::Rect<T> & rhs) {
@@ -92,8 +163,8 @@ inline void MapObject::swap(MapObject & rhs) {
     custom_properties.swap(rhs.custom_properties);
     points.swap(rhs.points);
     std::swap(shape_type, rhs.shape_type);
-    std::swap(texture, rhs.texture);
-    swap_rectangles(texture_bounds, rhs.texture_bounds);
+    std::swap(local_tile_id, rhs.local_tile_id);
+    tile_set.swap(rhs.tile_set);
 }
 
 } // end of tmap namespace

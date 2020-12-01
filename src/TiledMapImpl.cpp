@@ -48,6 +48,7 @@ using TiXmlElement      = tinyxml2::XMLElement;
 using Error             = std::runtime_error;
 using MapLayer          = tmap::MapLayer;
 using TileSetPtr        = tmap::TiledMapImpl::TileSetPtr;
+using ConstTileSetPtr   = tmap::TiledMapImpl::ConstTileSetPtr;
 using TileSetPtrVector  = tmap::TiledMapImpl::TileSetPtrVector;
 using PropertyMap       = tmap::TiledMapImpl::PropertyMap;
 using MapObject         = tmap::MapObject;
@@ -78,6 +79,8 @@ void load_whole_map_properties(const TiXmlElement * el, PropertyMap & map);
 void load_map_object_properties
     (const tinyxml2::XMLElement * el, const TileSetPtrVector & tilesets,
      MapObject & obj);
+
+TileSetPtr find_tile_set_for_gid(const TileSetPtrVector &, int gid) noexcept;
 
 } // end of <anonymous> namespace
 
@@ -169,17 +172,17 @@ void TiledMapImpl::load_from_file(const char * filename) {
 
     // tile layers
     TilePropertiesInterface * loaded_ground_layer = nullptr;
-    const TiXmlElement * layer_itr_el = nullptr;
-    for (layer_itr_el = map_el->FirstChildElement("layer");
+    for (const auto * layer_itr_el = map_el->FirstChildElement("layer");
          layer_itr_el; layer_itr_el = layer_itr_el->NextSiblingElement("layer"))
     {
-        TileLayer * tl = new TileLayer();
+        auto tl = std::make_unique<TileLayer>();
 
-        loaded_layers.push_back(std::unique_ptr<MapLayer>(tl));
         tl->load_from_xml(layer_itr_el, tileset_ptrs);
         // tile layers don't know the tile size (which is global), so it must
         // be set seperately
         tl->set_tile_size(float(tile_width), float(tile_height));
+
+        loaded_layers.emplace_back(std::move(tl));
     }
 
     load_map_objects(map_el, tileset_ptrs);
@@ -227,15 +230,6 @@ void TiledMapImpl::load_from_file(const char * filename) {
     m_tile_width  = tile_width ;
     m_tile_height = tile_height;
     m_tile_sets.swap(tileset_ptrs);
-}
-
-void TiledMapImpl::apply_view(const sf::View & view) {
-    sf::Vector2f cent = view.getCenter();
-    sf::Vector2f size = view.getSize();
-    for (std::unique_ptr<MapLayer> & map_layer : m_layers) {
-        map_layer->set_center    (cent.x, cent.y);
-        map_layer->set_field_size(size.x, size.y);
-    }
 }
 
 void TiledMapImpl::set_translation(const sf::Vector2f & offset) {
@@ -339,6 +333,9 @@ TiledMapImpl::IterValuePair TiledMapImpl::find_tile_effect_ref_and_name
     return IterValuePair();
 }
 
+ConstTileSetPtr TiledMapImpl::get_tile_set_for_gid(int gid) const noexcept
+    { return find_tile_set_for_gid(m_tile_sets, gid); }
+
 /* private */ void TiledMapImpl::load_map_objects
     (const TiXmlElement * map_el, const TileSetPtrVector & tilesets)
 {
@@ -417,9 +414,19 @@ void load_map_object_properties
     }
 }
 
+TileSetPtr find_tile_set_for_gid(const TileSetPtrVector & tilesets, int gid) noexcept {
+    auto itr = std::lower_bound(tilesets.begin(), tilesets.end(), gid,
+        [](const TileSetPtr & lhs, int gid)
+        { return lhs->end_gid() <= gid; });
+
+    if (itr == tilesets.end()) return nullptr;
+    return *itr;
+}
+
 // ----------------------------------------------------------------------------
 
 void set_optional_builtin_attr(std::string & str, const char * cstr);
+
 MapObject::PointVector read_points(const tinyxml2::XMLElement *);
 
 void load_map_object_common_properties
@@ -455,33 +462,33 @@ bool check_and_load_map_object_gid
     (const tinyxml2::XMLElement * el, const TileSetPtrVector & tilesets,
      MapObject & obj)
 {
-    static const char * const k_gid_not_found =
-        "check_and_load_map_object_gid: gid is not in range of any tileset.";
-
     int gid = 0;
     if (el->QueryIntAttribute("gid", &gid) != tinyxml2::XML_SUCCESS)
         { return false; }
+
     // empty tile object
     if (gid == 0) { return true; }
 
-    auto itr = std::lower_bound(tilesets.begin(), tilesets.end(), gid,
-        [](const TileSetPtr & lhs, int gid)
-        { return lhs->end_gid() <= gid; });
+    static const char * const k_gid_not_found =
+        "check_and_load_map_object_gid: gid is not in range of any tileset.";
 
-    if (itr == tilesets.end()) {
+    const auto & tileset_ptr = find_tile_set_for_gid(tilesets, gid);
+    if (!tileset_ptr) {
         throw Error(k_gid_not_found);
     }
-
-    const auto & tileset = **itr;
+    const auto & tileset = *tileset_ptr;
     if (tileset.begin_gid() > gid || tileset.end_gid() <= gid) {
         throw Error(k_gid_not_found);
     }
     assert(tileset.begin_gid() <= gid && tileset.end_gid() > gid);
-    obj.texture_bounds = tileset.compute_texture_rect(gid);
-    obj.texture        = &tileset.texture();
+    obj.local_tile_id = gid - tileset.begin_gid();
+    obj.tile_set = tileset_ptr;
     // TilEd is weird here, the y position starts at the bottom of the object
     // I want to make it one-to-one with how it appears in the editor
     obj.bounds.top -= obj.bounds.height;
+
+    if (obj.type.empty())
+        obj.type = tileset.type_of(obj.local_tile_id);
     return true;
 }
 

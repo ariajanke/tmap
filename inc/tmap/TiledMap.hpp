@@ -79,14 +79,15 @@ class TiledMapImpl;
  *  (maybe in the future an "insensitive" mode can be offered, that will ignore
  *   as many errors as possible) @n
  *  @n
- *  When rendering: @n
+ *  [OBSOLETE] When rendering: @n
  *  To use this class both "field size" and center must be specified, this
  *  determines which tiles are rendered. Rendering a large map with thousands
  *  of tiles, may consume a lot of CPU and cause the program to lose frames/
  *  operate slowly. @n
  *  @n
- *  Restriction: this map cannot be moved or copied, you can however swap
- *  contents with the 'swap' method.
+ *  Restriction: this map cannot be copied, you can however swap contents
+ *  with the 'swap' method. @n
+ *  It is possible to treat this object like unique_ptr
  */
 class TiledMap {
 public:
@@ -95,14 +96,15 @@ public:
     using MapLayerContainer  = std::vector<const sf::Drawable *>;
     using MapLayerIter       = MapLayerContainer::iterator;
     using MapLayerConstIter  = MapLayerContainer::const_iterator;
+    using TileSetPtr         = MapObject::TileSetPtr;
 
     TiledMap();
     TiledMap(const TiledMap &) = delete;
-    TiledMap(TiledMap &&)      = delete;
+    TiledMap(TiledMap &&);
     ~TiledMap();
 
     TiledMap & operator = (const TiledMap &) = delete;
-    TiledMap & operator = (TiledMap &&)      = delete;
+    TiledMap & operator = (TiledMap &&);
 
     /** Loads an Tiled XML Map from the given filename
      *  The function is sensitive to XML errors.
@@ -116,15 +118,6 @@ public:
 
     //! @copydoc TiledMap::load_from_file(const char*)
     void load_from_file(const std::string &);
-
-    /** @brief apply_view Positions Map layers and prepares them to render to
-     *         a target.
-     *  @param view A view, acting like a "camera", which selects which tiles
-     *         are visible and where to render them. The view is taken as being
-     *         the area which is visible to the user and thus will render all
-     *         tiles inside it.
-     */
-    void apply_view(const sf::View & view);
 
     /** Sets the amount which tile rendering will be offset.
      *  @param offset offset vector to displace rendering
@@ -152,6 +145,14 @@ public:
      */
     template <typename Func>
     void access_tile_effect(const char * attribute, Func && val_teffect_f);
+
+    /** @brief Gets a tile set interface pointer for some given gid.
+     *  @param gid global tile id
+     *  @returns pointer the tile set associated with the given gid, nullptr
+     *           if gid either is out of range to the tile map or is "k_no_tile"
+     *           (Note: TilEd defines this as gid == 0)
+     */
+    TileSetPtr get_tile_set_for_gid(int gid) const noexcept;
 
     /** Finds a tile layer by name, if the name's are amibigiuous, then only
      *  the first layer with that name is returned.
@@ -247,7 +248,6 @@ public:
     void swap(TiledMap & other);
 
 private:
-
     using IterValuePair = TileEffectAssignmentPriv::IterValuePair;
 
     // need a way to differenciate between beginning and ending iterator
@@ -256,7 +256,7 @@ private:
 
     IterValuePair find_tile_effect_ref_and_name(const char * name);
 
-    TiledMapImpl * m_impl;
+    TiledMapImpl * m_impl = nullptr;
 };
 
 template <typename Func>

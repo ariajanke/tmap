@@ -37,16 +37,9 @@ namespace tmap {
 
 class TileSet;
 
-// ok
 class ColorLayer : public MapLayer {
 public:
     ColorLayer();
-
-    void set_center(float x, float y) override;
-
-    sf::Vector2f center() const;
-
-    void set_field_size(float w, float h) override;
 
     void set_translation(float x, float y) override;
 
@@ -59,8 +52,7 @@ protected:
     void draw(sf::RenderTarget & target, sf::RenderStates) const override;
 
 private:
-    DrawRectangle m_rect;
-    sf::Vector2f m_translation;
+    sf::Color m_color;
 };
 
 } // end of tmap namespace

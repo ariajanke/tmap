@@ -37,6 +37,8 @@
 #include <type_traits>
 #include <vector>
 
+namespace sf { class View; }
+
 namespace tmap {
 
 class TileSet;
@@ -52,30 +54,15 @@ struct TileCellExposer;
  */
 class TileLayer final : public MapLayer, public TilePropertiesInterface {
 public:
-
     friend struct TileCellExposer;
 
     using ConstTileSetPtr = std::shared_ptr<const TileSet>;
-    using TileSetPtr = std::shared_ptr<TileSet>;
+    using TileSetPtr      = std::shared_ptr<TileSet>;
 
     /** A default TileLayer will not render any tiles, or anything for that
      *  matter.
      */
     TileLayer();
-
-    /** Sets the center location where the TileLayer is being viewed. Tiles
-     *  will render outside the center point until it starts rendering outside
-     *  the field (whose size is determined by a call the set_field_size).
-     *  @param x X coordinate of the new center point.
-     *  @param y Y coordinate of the new center point.
-     */
-    void set_center(float x, float y) override;
-
-    /** Setting a larger field size will cause more tiles to render.
-     *  @param w new width of the field of view
-     *  @param h new height of the field of view
-     */
-    void set_field_size(float w, float h) override;
 
     void set_translation(float x, float y) override;
 
@@ -134,12 +121,14 @@ public:
     float tile_height() const override
         { return m_tile_size.y; }
 
-protected:
+    /** @note exposed for testing purposes */
+    static sf::IntRect compute_draw_range
+        (const sf::View &, const sf::Vector2f & tilesize, int grid_width, int grid_height);
 
+protected:
     void draw(sf::RenderTarget & target, sf::RenderStates) const override;
 
 private:
-
     /** Special "adapter" class to, restricts usage of the tilesets container.
      *  Tilesets can be found and added quickly (O 1), but will have to be
      *  sorted before it can be used (an assert will fire if this step was
@@ -156,7 +145,6 @@ private:
      */
     class TileSetContainer {
     public:
-
         TileSetContainer() {}
 
         /** Adds tileset into the container, will need to be sorted later.
@@ -177,7 +165,6 @@ private:
         ConstTileSetPtr find_tileset_for_gid(int gid) const;
 
     private:
-
         bool m_is_sorted = false;
         std::vector<ConstTileSetPtr> m_tilesets;
     };
@@ -195,11 +182,11 @@ private:
 
     bool load_from_xml(const TiXmlElement * el);
 
+    sf::IntRect compute_draw_range(const sf::View &) const;
+
     std::string m_name;
     Grid<TileCell> m_tile_matrix;
-    sf::Vector2f m_field_size;
     sf::Vector2f m_tile_size;
-    sf::IntRect m_draw_range;
     sf::Vector2f m_translation;
     int m_opacity = 1;
 

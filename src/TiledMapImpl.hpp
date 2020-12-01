@@ -55,16 +55,15 @@ public:
     using MapObjectContainer = MapObject::MapObjectContainer;
     using MapLayerIter       = TiledMap::MapLayerIter;
     using MapLayerConstIter  = TiledMap::MapLayerConstIter;
-    using TileSetPtr        = std::shared_ptr<tmap::TileSet>;
-    using TileSetPtrVector  = std::vector<TileSetPtr>;
+    using TileSetPtr         = std::shared_ptr<tmap::TileSet>;
+    using ConstTileSetPtr    = std::shared_ptr<const TileSetInterface>;
+    using TileSetPtrVector   = std::vector<TileSetPtr>;
 
     TiledMapImpl();
 
     ~TiledMapImpl();
 
     void load_from_file(const char * filename);
-
-    void apply_view(const sf::View & view);
 
     void set_translation(const sf::Vector2f & offset);
 
@@ -105,8 +104,9 @@ public:
     IterValuePair find_tile_effect_ref_and_name
         (const char * name, const IterValuePair & prev);
 
-private:
+    ConstTileSetPtr get_tile_set_for_gid(int gid) const noexcept;
 
+private:
     using MapLayerContainer = std::vector<std::unique_ptr<MapLayer>>;
     using MapLayerMap = std::unordered_multimap<std::string, typename TiledMap::MapLayerIter>;
     using TileLayerMap = std::unordered_map<std::string, TilePropertiesInterface *>;
