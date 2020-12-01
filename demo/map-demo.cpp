@@ -12,6 +12,8 @@
 #include <common/StringUtil.hpp>
 #include <common/TestSuite.hpp>
 
+#include <iostream>
+
 #include <cassert>
 
 namespace {
@@ -204,6 +206,8 @@ void do_draw_range_tests() {
         auto tileszv = sf::Vector2f(float(k_tile_size), float(k_tile_size));
         auto gv = tmap::TileLayer::compute_draw_range(
             view, tileszv, k_grid_width, k_grid_height);
+        std::cout << "Culled " << (k_grid_width*k_grid_height - drange.width*drange.height)
+                  << " tiles." << std::endl;
         return gv == drange;
     };
 

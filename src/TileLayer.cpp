@@ -138,12 +138,23 @@ int TileLayer::height() const /* override */
 
     // compute draw offset, that is how much we need to "back up" tiles before
     // what we see makes sense
-    sf::Vector2f offset
-              (std::fmod(fx, tilesize.x), std::fmod(fy, tilesize.y));
+    sf::Vector2f offset(magnitude(std::remainder(fx, tilesize.x)),
+                        magnitude(std::remainder(fy, tilesize.y)));
 
     // next is size of selection, make sure the entire screen is filled
     draw_range.width  = int(std::ceil((field_size.x + offset.x) / tilesize.x));
     draw_range.height = int(std::ceil((field_size.y + offset.y) / tilesize.y));
+
+    // should now have tiles visible on screen
+
+    if (draw_range.left < 0) {
+        draw_range.width += draw_range.left;
+        draw_range.left = 0;
+    }
+    if (draw_range.top < 0) {
+        draw_range.height += draw_range.top;
+        draw_range.top = 0;
+    }
 
     // fix the range at the max if the right side/bottom side are out of range
     if (draw_range.left + draw_range.width > grid_width)
@@ -153,8 +164,6 @@ int TileLayer::height() const /* override */
 
     // draw limits (stop from attempting to render tiles out of the bounds of
     // the map)
-    draw_range.left   = std::max(0          , draw_range.left  );
-    draw_range.top    = std::max(0          , draw_range.top   );
     draw_range.width  = std::min(grid_width , draw_range.width );
     draw_range.height = std::min(grid_height, draw_range.height);
     return draw_range;
@@ -261,48 +270,6 @@ const TileLayer::TileCell & TileLayer::tile(int x, int y) const
 
 /* private */ sf::IntRect TileLayer::compute_draw_range(const sf::View & view) const {
     return compute_draw_range(view, m_tile_size, width(), height());
-#   if 0
-    // edge case tile size is zero
-    if (m_tile_size == sf::Vector2f()) return sf::IntRect();
-
-    auto field_size = view.getSize();
-    // compute extreme points as reals (floats)
-    float fx = float(view.getCenter().x - field_size.x / 2.f);
-    float fy = float(view.getCenter().y - field_size.y / 2.f);
-
-    sf::IntRect draw_range;
-    // use float modulus to compute what the start tile is (convert to int)
-    draw_range.left = int(std::floor(fx / m_tile_size.x));
-    draw_range.top  = int(std::floor(fy / m_tile_size.y));
-
-    // out of range
-    if (draw_range.left >= width () || draw_range.top >= height()) {
-        return sf::IntRect();
-    }
-
-    // compute draw offset, that is how much we need to "back up" tiles before
-    // what we see makes sense
-    sf::Vector2f offset
-              (std::fmod(fx, m_tile_size.x), std::fmod(fy, m_tile_size.y));
-
-    // next is size of selection, make sure the entire screen is filled
-    draw_range.width  = int(std::ceil((field_size.x + offset.x) / m_tile_size.x));
-    draw_range.height = int(std::ceil((field_size.y + offset.y) / m_tile_size.y));
-
-    // fix the range at the max if the right side/bottom side are out of range
-    if (draw_range.left + draw_range.width > width())
-        draw_range.width = width() - draw_range.left;
-    if (draw_range.top + draw_range.height > height())
-        draw_range.height = height() - draw_range.top;
-
-    // draw limits (stop from attempting to render tiles out of the bounds of
-    // the map)
-    draw_range.left   = std::max(0       , draw_range.left  );
-    draw_range.top    = std::max(0       , draw_range.top   );
-    draw_range.width  = std::min(width (), draw_range.width );
-    draw_range.height = std::min(height(), draw_range.height);
-    return draw_range;
-#   endif
 }
 
 // <--------------------- TileLayer::TileSetContainer ------------------------>
